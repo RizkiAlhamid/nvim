@@ -416,6 +416,8 @@ require('lazy').setup({
       local capabilities = vim.lsp.protocol.make_client_capabilities()
       capabilities = vim.tbl_deep_extend('force', capabilities, require('cmp_nvim_lsp').default_capabilities())
 
+      local lspconfig = require 'lspconfig'
+
       -- Enable the following language servers
       --  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
       --
@@ -428,25 +430,7 @@ require('lazy').setup({
       local servers = {
         clangd = {},
         -- gopls = {},
-        pyright = {
-          on_init = function(client)
-            client.config.settings = client.config.settings or {}
-            client.config.settings.python = client.config.settings.python or {}
-            client.config.settings.python.pythonPath = (function(workspace)
-              if vim.env.VIRTUAL_ENV then
-                return vim.fs.joinpath(vim.env.VIRTUAL_ENV, 'bin', 'python')
-              end
-              if workspace then
-                local poetry_lock_path = vim.fs.joinpath(workspace, 'poetry.lock')
-                if vim.fn.filereadable(poetry_lock_path) == 1 then
-                  local venv = vim.fn.trim(vim.fn.system 'poetry env info -p')
-                  return vim.fs.joinpath(venv, 'bin', 'python')
-                end
-              end
-              return vim.fn.exepath 'python3' or vim.fn.exepath 'python' or 'python'
-            end)(client.config.root_dir)
-          end,
-        },
+        ty = {},
         -- rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
         --
@@ -498,10 +482,24 @@ require('lazy').setup({
             -- by the server configuration above. Useful when disabling
             -- certain features of an LSP (for example, turning off formatting for tsserver)
             server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
-            require('lspconfig')[server_name].setup(server)
+            lspconfig[server_name].setup(server)
           end,
         },
       }
+
+      pcall(vim.api.nvim_del_user_command, 'LspRestart')
+      vim.api.nvim_create_user_command('LspRestart', function()
+        local bufnr = vim.api.nvim_get_current_buf()
+        local clients = vim.lsp.get_clients { bufnr = bufnr }
+
+        for _, client in ipairs(clients) do
+          vim.lsp.stop_client(client.id, true)
+        end
+
+        vim.defer_fn(function()
+          vim.cmd 'LspStart'
+        end, 100)
+      end, { desc = 'Restart LSP clients for current buffer' })
     end,
   },
 
